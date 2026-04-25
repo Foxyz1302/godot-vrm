@@ -808,6 +808,10 @@ func _parse_secondary_node(secondary_node: Node, vrm_extension: Dictionary, gsta
 	secondary_node.set_script(vrm_secondary)
 	secondary_node.set("skeleton", skeleton_path)
 	secondary_node.set("spring_bones", spring_bones)
+	# Store spring bone data in metadata for Godot 4.7+ compatibility.
+	secondary_node.set_meta("vrm_secondary_skeleton", skeleton_path)
+	secondary_node.set_meta("vrm_secondary_spring_bones", spring_bones)
+	secondary_node.set_meta("vrm_is_secondary", true)
 
 
 func _add_joints_recursive(new_joints_set: Dictionary, gltf_nodes: Array, bone: int, include_child_meshes: bool = false) -> void:
@@ -863,7 +867,7 @@ func _add_vrm_nodes_to_skin(obj: Dictionary) -> bool:
 	return true
 
 
-func _import_preflight(gstate: GLTFState, extensions: PackedStringArray = PackedStringArray(), psa2: Variant = null) -> Error:
+func _import_preflight(gstate: GLTFState, extensions: PackedStringArray = PackedStringArray()) -> Error:
 	if extensions.has("VRMC_vrm"):
 		# VRM 1.0 file. Do not parse as a VRM 0.0.
 		return ERR_INVALID_DATA
@@ -955,12 +959,18 @@ func _import_post(gstate: GLTFState, node: Node) -> Error:
 	_create_animation_player(animplayer, vrm_extension, gstate, human_bone_to_idx, pose_diffs)
 
 	root_node.set_script(vrm_top_level)
+	# Store marker in metadata for Godot 4.7+ compatibility.
+	# The editor import pipeline may strip scripts (PROPERTY_USAGE_INTERNAL),
+	# so we use metadata as a fallback for runtime detection.
+	root_node.set_meta("vrm_is_imported", true)
 
 	var vrm_meta: Resource = _create_meta(root_node, animplayer, vrm_extension, gstate, skeleton, humanBones, human_bone_to_idx, pose_diffs)
 	root_node.set("vrm_meta", vrm_meta)
+	# Also store vrm_meta in metadata so it survives script stripping.
+	root_node.set_meta("vrm_meta", vrm_meta)
 
 	if vrm_extension.has("secondaryAnimation") and (vrm_extension["secondaryAnimation"].get("colliderGroups", []).size() > 0 or vrm_extension["secondaryAnimation"].get("boneGroups", []).size() > 0):
-		var secondary_node: Node = root_node.get_node("secondary")
+		var secondary_node: Node = root_node.get_node_or_null("secondary")
 		if secondary_node == null:
 			secondary_node = Node3D.new()
 			root_node.add_child(secondary_node, true)

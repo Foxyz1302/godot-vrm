@@ -210,6 +210,8 @@ func _enter_tree() -> void:
 	#GLTFDocument.register_gltf_document_extension(VRMC_vrm_animation_inst)
 	import_plugin = preload("./import_vrm.gd").new()
 	add_scene_format_importer_plugin(import_plugin)
+	# Register runtime detector for Godot 4.7+ script stripping workaround
+	add_autoload_singleton("VRMRuntimeDetector", "res://addons/vrm/vrm_runtime_detector.gd")
 
 
 func _exit_tree() -> void:
@@ -228,4 +230,5 @@ func _exit_tree() -> void:
 	#GLTFDocument.unregister_gltf_document_extension(VRMC_vrm_animation_inst)
 	remove_scene_format_importer_plugin(import_plugin)
 	remove_scene_post_import_plugin(vrm_options_post_import_plugin_inst)
+	remove_autoload_singleton("VRMRuntimeDetector")
 	import_plugin = null

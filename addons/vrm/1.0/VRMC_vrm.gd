@@ -1034,8 +1034,13 @@ func _import_post(gstate: GLTFState, node: Node) -> Error:
 	_create_animation_player(animplayer, vrm_extension, gstate, human_bone_to_idx, pose_diffs)
 
 	root_node.set_script(vrm_top_level)
+	# Store marker in metadata for Godot 4.7+ compatibility.
+	# The editor import pipeline may strip scripts (PROPERTY_USAGE_INTERNAL).
+	root_node.set_meta("vrm_is_imported", true)
 
 	var vrm_meta: Resource = _create_meta(root_node, animplayer, vrm_extension, gstate, skeleton, humanBones, human_bone_to_idx, pose_diffs)
 	root_node.set("vrm_meta", vrm_meta)
+	# Also store vrm_meta in metadata so it survives script stripping.
+	root_node.set_meta("vrm_meta", vrm_meta)
 
 	return OK

@@ -37,14 +37,20 @@ func _import_scene(path: String, flags: int, options: Dictionary) -> Object:
 	state.set_additional_data(&"vrm/third_person_layers", options.get(&"vrm/only_if_head_hiding_uses_layers/third_person_layers", 4) as int)
 	# HANDLE_BINARY_EMBED_AS_BASISU crashes on some files in 4.0 and 4.1
 	state.handle_binary_image = GLTFState.HANDLE_BINARY_EMBED_AS_UNCOMPRESSED  # GLTFState.HANDLE_BINARY_EXTRACT_TEXTURES
+	# Godot 4.7 duplicates GLTFDocumentExtension instances during import,
+	# which strips GDScript scripts. We must call _import_post manually.
 	var err = gltf.append_from_file(path, state, flags)
 	if err != OK:
 		gltf.unregister_gltf_document_extension(vrm_extension)
 		return null
 	var generated_scene = gltf.generate_scene(state)
+	# Manually call _import_post since Godot 4.7 duplicates extensions and strips scripts
+	if generated_scene != null:
+		vrm_extension._import_post(state, generated_scene)
 	if SAVE_DEBUG_GLTFSTATE_RES and path != "":
 		if !ResourceLoader.exists(path + ".res"):
 			state.take_over_path(path + ".res")
 			ResourceSaver.save(state, path + ".res")
 	gltf.unregister_gltf_document_extension(vrm_extension)
+	print("Import VRM: returning scene")
 	return generated_scene

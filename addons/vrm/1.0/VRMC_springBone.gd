@@ -182,6 +182,10 @@ func _parse_secondary_node(secondary_node: Node, vrm_extension: Dictionary, gsta
 	secondary_node.set_script(vrm_secondary)
 	secondary_node.set("skeleton", secondary_node.get_path_to(skeleton))
 	secondary_node.set("spring_bones", spring_bones)
+	# Store spring bone data in metadata for Godot 4.7+ compatibility.
+	secondary_node.set_meta("vrm_secondary_skeleton", secondary_node.get_path_to(skeleton))
+	secondary_node.set_meta("vrm_secondary_spring_bones", spring_bones)
+	secondary_node.set_meta("vrm_is_secondary", true)
 
 
 func _add_joints_recursive(new_joints_set: Dictionary, gltf_nodes: Array, bone: int, include_child_meshes: bool = false) -> void:
@@ -434,3 +438,4 @@ func _export_post(state: GLTFState):
 		json_springs.push_back(spring)
 	sbone_extension["springs"] = json_springs
 	sbone_extension["specVersion"] = "1.0"
+	return OK
