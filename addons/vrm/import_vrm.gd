@@ -1,7 +1,12 @@
 @tool
 extends EditorSceneFormatImporter
 
-const gltf_document_extension_class = preload("./vrm_extension.gd")
+const vrm_extension_class = preload("./vrm_extension.gd")
+const vrmc_vrm_class = preload("./1.0/VRMC_vrm.gd")
+const vrmc_spring_bone_class = preload("./1.0/VRMC_springBone.gd")
+const vrmc_node_constraint_class = preload("./1.0/VRMC_node_constraint.gd")
+const vrmc_materials_mtoon_class = preload("./1.0/VRMC_materials_mtoon.gd")
+const vrmc_materials_hdr_emissive_multiplier_class = preload("./1.0/VRMC_materials_hdr_emissiveMultiplier.gd")
 const vrm_constants = preload("./vrm_constants.gd")
 
 const SAVE_DEBUG_GLTFSTATE_RES: bool = false
@@ -29,28 +34,61 @@ func _import_scene(path: String, flags: int, options: Dictionary) -> Object:
 	print("Import VRM: " + path + " ----------------------")
 	var gltf: GLTFDocument = GLTFDocument.new()
 	flags |= EditorSceneFormatImporter.IMPORT_USE_NAMED_SKIN_BINDS
-	var vrm_extension: GLTFDocumentExtension = gltf_document_extension_class.new()
-	gltf.register_gltf_document_extension(vrm_extension, true)
+	
+	# Godot 4.7 duplicates GLTFDocumentExtension instances during import,
+	# which strips GDScript scripts. We create our own instances and manually
+	# call _import_post after generate_scene to bypass this bug.
+	var all_extensions: Array[GLTFDocumentExtension] = [
+		vrm_extension_class.new(),
+		vrmc_vrm_class.new(),
+		vrmc_spring_bone_class.new(),
+		vrmc_node_constraint_class.new(),
+		vrmc_materials_mtoon_class.new(),
+		vrmc_materials_hdr_emissive_multiplier_class.new(),
+	]
+	
+	for ext in all_extensions:
+		gltf.register_gltf_document_extension(ext, true)
+	
 	var state: GLTFState = GLTFState.new()
 	state.set_additional_data(&"vrm/head_hiding_method", options.get(&"vrm/head_hiding_method", 0) as vrm_constants.HeadHidingSetting)
 	state.set_additional_data(&"vrm/first_person_layers", options.get(&"vrm/only_if_head_hiding_uses_layers/first_person_layers", 2) as int)
 	state.set_additional_data(&"vrm/third_person_layers", options.get(&"vrm/only_if_head_hiding_uses_layers/third_person_layers", 4) as int)
 	# HANDLE_BINARY_EMBED_AS_BASISU crashes on some files in 4.0 and 4.1
 	state.handle_binary_image = GLTFState.HANDLE_BINARY_EMBED_AS_UNCOMPRESSED  # GLTFState.HANDLE_BINARY_EXTRACT_TEXTURES
-	# Godot 4.7 duplicates GLTFDocumentExtension instances during import,
-	# which strips GDScript scripts. We must call _import_post manually.
+	
 	var err = gltf.append_from_file(path, state, flags)
 	if err != OK:
-		gltf.unregister_gltf_document_extension(vrm_extension)
+		for ext in all_extensions:
+			gltf.unregister_gltf_document_extension(ext)
 		return null
+	
 	var generated_scene = gltf.generate_scene(state)
-	# Manually call _import_post since Godot 4.7 duplicates extensions and strips scripts
+	
+	# Manually call _import_post on all extensions since Godot 4.7
+	# duplicates extensions and strips GDScript scripts.
 	if generated_scene != null:
-		vrm_extension._import_post(state, generated_scene)
+		var extensions_used: PackedStringArray
+		if state.json.has("extensionsUsed"):
+			extensions_used = state.json["extensionsUsed"]
+		
+		for ext in all_extensions:
+			# Determine if this extension should handle this file.
+			# We call _import_preflight on our original instances (which have scripts)
+			# to check if they should process this file.
+			var preflight_err = ext._import_preflight(state, extensions_used)
+			if preflight_err == OK:
+				print("Import VRM: calling _import_post for ", ext.get_script().resource_path.get_file())
+				var post_err = ext._import_post(state, generated_scene)
+				if post_err != OK and post_err != ERR_INVALID_DATA:
+					push_warning("VRM extension _import_post returned error: " + str(post_err))
+	
 	if SAVE_DEBUG_GLTFSTATE_RES and path != "":
 		if !ResourceLoader.exists(path + ".res"):
 			state.take_over_path(path + ".res")
 			ResourceSaver.save(state, path + ".res")
-	gltf.unregister_gltf_document_extension(vrm_extension)
+	
+	for ext in all_extensions:
+		gltf.unregister_gltf_document_extension(ext)
 	print("Import VRM: returning scene")
 	return generated_scene
